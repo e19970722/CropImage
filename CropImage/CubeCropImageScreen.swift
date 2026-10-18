@@ -45,25 +45,16 @@ struct CubeCropImageScreen: View {
             let imageSize = getImageSize(in: geo.size)
 
             ZStack {
-                Color.black.ignoresSafeArea()
+                Color.black
 
                 ZStack {
-                    imageView()
+                    imageView
                     editingView(imageSize: imageSize)
                 }
-                .frame(
-                    width: imageSize.width,
-                    height: imageSize.height
-                )
-                .position(
-                    x: geo.size.width / 2,
-                    y: geo.size.height / 2
-                )
+                .frame(width: imageSize.width, height: imageSize.height)
+                .position(x: geo.size.width / 2, y: geo.size.height / 2)
             }
-            .frame(
-                width: geo.size.width,
-                height: geo.size.height
-            )
+            .frame(width: geo.size.width, height: geo.size.height)
             .onAppear {
                 updateCropRect(for: imageSize)
             }
@@ -76,6 +67,7 @@ struct CubeCropImageScreen: View {
                     .aspectRatio(contentMode: .fit)
             }
         }
+        .ignoresSafeArea()
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 saveButton
@@ -93,7 +85,7 @@ struct CubeCropImageScreen: View {
 
 // MARK: - Views
 private extension CubeCropImageScreen {
-    func imageView() -> some View {
+    var imageView: some View {
         Image(uiImage: image)
             .resizable()
             .aspectRatio(contentMode: .fit)
@@ -129,10 +121,7 @@ private extension CubeCropImageScreen {
             .overlay(alignment: .bottomTrailing) {
                 cornerDragView(.bottomTrailing, imageSize: imageSize)
             }
-            .position(
-                x: cropRect.midX,
-                y: cropRect.midY
-            )
+            .position(x: cropRect.midX, y: cropRect.midY)
             .offset(dragTranslation)
             .gesture(
                 DragGesture()
