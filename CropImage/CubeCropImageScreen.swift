@@ -45,16 +45,11 @@ struct CubeCropImageScreen: View {
             let imageSize = getImageSize(in: geo.size)
 
             ZStack {
-                Color.black
-
-                ZStack {
-                    imageView
-                    editingView(imageSize: imageSize)
-                }
-                .frame(width: imageSize.width, height: imageSize.height)
-                .position(x: geo.size.width / 2, y: geo.size.height / 2)
+                imageView
+                editingView(imageSize: imageSize)
             }
-            .frame(width: geo.size.width, height: geo.size.height)
+            .frame(width: imageSize.width, height: imageSize.height)
+            .position(x: geo.size.width / 2, y: geo.size.height / 2)
             .onAppear {
                 updateCropRect(for: imageSize)
             }
@@ -68,6 +63,9 @@ struct CubeCropImageScreen: View {
             }
         }
         .ignoresSafeArea()
+        .background(
+            Color.black
+        )
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 saveButton
@@ -231,32 +229,21 @@ private extension CubeCropImageScreen {
             previousImageSize = imageSize
         }
 
-        guard previousImageSize.width > 0,
-              previousImageSize.height > 0 else {
-
-            cropRect = CGRect(
-                origin: .zero,
-                size: imageSize
-            )
-
+        guard previousImageSize.width > 0, previousImageSize.height > 0 else {
+            cropRect = CGRect(origin: .zero, size: imageSize)
             return
         }
 
         let scaleX = imageSize.width / previousImageSize.width
         let scaleY = imageSize.height / previousImageSize.height
 
-        cropRect = CGRect(
-            x: cropRect.minX * scaleX,
-            y: cropRect.minY * scaleY,
-            width: cropRect.width * scaleX,
-            height: cropRect.height * scaleY
-        )
+        cropRect = CGRect(x: cropRect.minX * scaleX,
+                          y: cropRect.minY * scaleY,
+                          width: cropRect.width * scaleX,
+                          height: cropRect.height * scaleY)
 
         // 尺寸改變後，重新限制裁切框的位置與大小。
-        cropRect = cropRect.intersection(
-            CGRect(origin: .zero, size: imageSize)
-        )
-
+        cropRect = cropRect.intersection(CGRect(origin: .zero, size: imageSize))
         hideMiddleControl = cropRect.width < 100
     }
 }
@@ -302,15 +289,8 @@ private extension CubeCropImageScreen {
         var minY = startRect.minY
         var maxY = startRect.maxY
 
-        let minWidth = min(
-            minCropSize.width,
-            imageSize.width
-        )
-
-        let minHeight = min(
-            minCropSize.height,
-            imageSize.height
-        )
+        let minWidth = min(minCropSize.width, imageSize.width)
+        let minHeight = min(minCropSize.height, imageSize.height)
 
         let isTop =
             type == .top ||
@@ -331,51 +311,33 @@ private extension CubeCropImageScreen {
             type == .bottomTrailing
 
         if isLeft {
-            minX = max(
-                0,
-                min(
-                    startRect.minX + translation.width,
-                    maxX - minWidth
-                )
+            minX = max(0,
+                min(startRect.minX + translation.width, maxX - minWidth)
             )
         }
 
         if isRight {
             maxX = min(
                 imageSize.width,
-                max(
-                    startRect.maxX + translation.width,
-                    minX + minWidth
-                )
+                max(startRect.maxX + translation.width, minX + minWidth)
             )
         }
 
         if isTop {
             minY = max(
                 0,
-                min(
-                    startRect.minY + translation.height,
-                    maxY - minHeight
-                )
+                min(startRect.minY + translation.height, maxY - minHeight)
             )
         }
 
         if isBottom {
             maxY = min(
                 imageSize.height,
-                max(
-                    startRect.maxY + translation.height,
-                    minY + minHeight
-                )
+                max(startRect.maxY + translation.height, minY + minHeight)
             )
         }
 
-        return CGRect(
-            x: minX,
-            y: minY,
-            width: maxX - minX,
-            height: maxY - minY
-        )
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
     }
 }
 
@@ -395,12 +357,7 @@ private extension CubeCropImageScreen {
         )
 
         let normalizedImage = renderer.image { _ in
-            image.draw(
-                in: CGRect(
-                    origin: .zero,
-                    size: image.size
-                )
-            )
+            image.draw(in: CGRect(origin: .zero, size: image.size))
         }
 
         return normalizedImage.cgImage
@@ -413,32 +370,21 @@ private extension CubeCropImageScreen {
         cgImage: CGImage
     ) -> CGRect? {
 
-        guard imageSize.width > 0,
-              imageSize.height > 0 else {
+        guard imageSize.width > 0, imageSize.height > 0 else {
             return nil
         }
 
         let scaleX = CGFloat(cgImage.width) / imageSize.width
         let scaleY = CGFloat(cgImage.height) / imageSize.height
 
-        let pixelRect = CGRect(
-            x: cropRect.minX * scaleX,
-            y: cropRect.minY * scaleY,
-            width: cropRect.width * scaleX,
-            height: cropRect.height * scaleY
-        ).integral
+        let pixelRect = CGRect(x: cropRect.minX * scaleX,
+                               y: cropRect.minY * scaleY,
+                               width: cropRect.width * scaleX,
+                               height: cropRect.height * scaleY).integral
 
-        let imageBounds = CGRect(
-            x: 0,
-            y: 0,
-            width: cgImage.width,
-            height: cgImage.height
-        )
-
+        let imageBounds = CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height)
         let validRect = pixelRect.intersection(imageBounds)
-
-        guard !validRect.isNull,
-              !validRect.isEmpty else {
+        guard !validRect.isNull, !validRect.isEmpty else {
             return nil
         }
 
@@ -460,8 +406,7 @@ private extension CubeCropImageScreen {
             return
         }
 
-        guard previousImageSize.width > 0,
-              previousImageSize.height > 0 else {
+        guard previousImageSize.width > 0, previousImageSize.height > 0 else {
             print("圖片顯示尺寸無效")
             return
         }
