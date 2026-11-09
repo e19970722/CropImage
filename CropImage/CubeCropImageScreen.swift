@@ -346,30 +346,19 @@ private extension CubeCropImageScreen {
 private extension CubeCropImageScreen {
 
     /// 將 UIImage 渲染成方向正確的 CGImage。
-    func getCGImage(from image: UIImage) -> CGImage? {
-
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-
-        let renderer = UIGraphicsImageRenderer(
-            size: image.size,
-            format: format
-        )
-
-        let normalizedImage = renderer.image { _ in
-            image.draw(in: CGRect(origin: .zero, size: image.size))
+    func normalizedCGImage(from image: UIImage) -> CGImage? {
+        if image.imageOrientation == .up, let cgImage = image.cgImage {
+            return cgImage
         }
-
-        return normalizedImage.cgImage
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = image.scale
+        return UIGraphicsImageRenderer(size: image.size, format: format)
+            .image { _ in image.draw(at: .zero) }
+            .cgImage
     }
 
     /// 將圖片內部座標轉換為 Pixel 座標。
-    func getPixelCropRect(
-        cropRect: CGRect,
-        imageSize: CGSize,
-        cgImage: CGImage
-    ) -> CGRect? {
-
+    func getPixelCropRect(cropRect: CGRect, imageSize: CGSize, cgImage: CGImage) -> CGRect? {
         guard imageSize.width > 0, imageSize.height > 0 else {
             return nil
         }
@@ -401,7 +390,7 @@ private extension CubeCropImageScreen {
 
     /// 執行裁切，並取得可供 API 上傳的 JPEG Data。
     func saveCroppedImage() {
-        guard let cgImage = getCGImage(from: image) else {
+        guard let cgImage = normalizedCGImage(from: image) else {
             print("無法取得 CGImage")
             return
         }
