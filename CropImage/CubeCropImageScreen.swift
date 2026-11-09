@@ -7,7 +7,6 @@
 
 import SwiftUI
 import UIKit
-import CoreImage
 
 struct CroppedImage: Identifiable {
     let id = UUID().uuidString
@@ -25,52 +24,47 @@ struct CubeCropImageScreen: View {
 
     // MARK: - Crop
 
-    @State private var cropRect: CGRect = .zero
-    @State private var previousImageSize: CGSize = .zero
-    @State private var hideMiddleControl = false
-    @State private var afterCropImage: CroppedImage? = nil
+    /// 裁切框,以「圖片寬高的比例」表示(0...1)。
+    /// 因為與顯示尺寸無關,旋轉或尺寸改變時不需要另外同步。
+    @State private var cropRect = CGRect(x: 0, y: 0, width: 1, height: 1)
 
-    @GestureState private var dragTranslation: CGSize = .zero
+    /// 本次拖曳(移動或縮放)開始時的裁切框快照,放手後清除。
+    @State private var dragStartRect: CGRect?
 
+    @State private var afterCropImage: CroppedImage?
+
+    /// 裁切框最小尺寸(單位:pt)。
     private let minCropSize = CGSize(width: 80, height: 80)
 
-    // MARK: - Resize
-
-    @State private var resizeStartRect: CGRect?
+    /// 裁切框寬度(單位:pt)小於此值時,隱藏上下中間的控制點。
+    private let hideMiddleControlWidth: CGFloat = 100
 
     // MARK: - Body
 
     var body: some View {
-        GeometryReader { geo in
-            let imageSize = getImageSize(in: geo.size)
-
-            ZStack {
-                imageView
-                editingView(imageSize: imageSize)
+        Image(uiImage: image)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .overlay {
+                // overlay 的尺寸 = 圖片實際顯示尺寸,不需要手動計算
+                GeometryReader { geo in
+                    cropOverlay(imageSize: geo.size)
+                }
             }
-            .frame(width: imageSize.width, height: imageSize.height)
-            .position(x: geo.size.width / 2, y: geo.size.height / 2)
-            .onAppear {
-                updateCropRect(for: imageSize)
-            }
-            .onChange(of: imageSize) { newSize in
-                updateCropRect(for: newSize)
+            .padding(.horizontal, horizontalPadding)
+            .padding(.vertical, verticalPadding)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.black.ignoresSafeArea())
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    saveButton
+                }
             }
             .sheet(item: $afterCropImage) { croppedImage in
                 Image(uiImage: croppedImage.image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
             }
-        }
-        .ignoresSafeArea()
-        .background(
-            Color.black
-        )
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                saveButton
-            }
-        }
     }
 }
 
@@ -83,24 +77,32 @@ struct CubeCropImageScreen: View {
 
 // MARK: - Views
 private extension CubeCropImageScreen {
-    var imageView: some View {
-        Image(uiImage: image)
-            .resizable()
-            .aspectRatio(contentMode: .fit)
+
+    func cropOverlay(imageSize: CGSize) -> some View {
+        let rect = cropRect.scaled(to: imageSize)
+
+        return ZStack(alignment: .topLeading) {
+            dimmingMask(imageSize: imageSize, cropRect: rect)
+            frameView(rect: rect, imageSize: imageSize)
+        }
+        .frame(width: imageSize.width, height: imageSize.height)
     }
 
-    func editingView(imageSize: CGSize) -> some View {
-        Color.black.opacity(0.7)
-            .overlay {
-                frameView(imageSize: imageSize)
-            }
-            .compositingGroup()
+    /// 裁切框外的半透明遮罩:外框 + 裁切框,以 even-odd 規則挖空中間。
+    func dimmingMask(imageSize: CGSize, cropRect: CGRect) -> some View {
+        Path { path in
+            path.addRect(CGRect(origin: .zero, size: imageSize))
+            path.addRect(cropRect)
+        }
+        .fill(Color.black.opacity(0.7), style: FillStyle(eoFill: true))
+        .allowsHitTesting(false)
     }
 
-    func frameView(imageSize: CGSize) -> some View {
-        Rectangle()
-            .frame(width: cropRect.width, height: cropRect.height)
-            .blendMode(.destinationOut)
+    /// 裁切框本體:可拖曳移動,並在周圍放置控制點。
+    func frameView(rect: CGRect, imageSize: CGSize) -> some View {
+        Color.clear
+            .frame(width: rect.width, height: rect.height)
+            .contentShape(Rectangle())
             .overlay(alignment: .topLeading) {
                 cornerDragView(.topLeading, imageSize: imageSize)
             }
@@ -119,70 +121,30 @@ private extension CubeCropImageScreen {
             .overlay(alignment: .bottomTrailing) {
                 cornerDragView(.bottomTrailing, imageSize: imageSize)
             }
-            .position(x: cropRect.midX, y: cropRect.midY)
-            .offset(dragTranslation)
-            .gesture(
-                DragGesture()
-                    .updating($dragTranslation) { value, state, _ in
-                        state = clampedTranslation(
-                            value.translation,
-                            cropRect: cropRect,
-                            imageSize: imageSize
-                        )
-                    }
-                    .onEnded { value in
-                        let translation = clampedTranslation(
-                            value.translation,
-                            cropRect: cropRect,
-                            imageSize: imageSize
-                        )
-
-                        cropRect.origin.x += translation.width
-                        cropRect.origin.y += translation.height
-                    }
-            )
+            .gesture(moveGesture(imageSize: imageSize))
+            .offset(x: rect.minX, y: rect.minY)
     }
 
     func cornerDragView(_ type: CornerType, imageSize: CGSize) -> some View {
-        let needHide = (type == .top || type == .bottom) && hideMiddleControl
+        let needHide = (type == .top || type == .bottom) && shouldHideMiddleControl(imageSize: imageSize)
+
         return Image(type.image)
             .resizable()
             .aspectRatio(contentMode: .fit)
             .frame(width: 40, height: 40)
             .opacity(needHide ? 0 : 1)
-            .disabled(needHide)
             .padding(.leading, type.leadingPadding)
             .padding(.trailing, type.trailingPadding)
             .padding(.top, type.topPadding)
             .padding(.bottom, type.bottomPadding)
-            .gesture(
-                DragGesture(coordinateSpace: .global)
-                    .onChanged { value in
-                        if resizeStartRect == nil {
-                            resizeStartRect = cropRect
-                        }
-
-                        guard let startRect = resizeStartRect else { return }
-
-                        cropRect = updateCropSize(
-                            type,
-                            imageSize: imageSize,
-                            startRect: startRect,
-                            translation: value.translation
-                        )
-
-                        hideMiddleControl = cropRect.width < 100
-                    }
-                    .onEnded { _ in
-                        resizeStartRect = nil
-                    }
-            )
+            .gesture(resizeGesture(type, imageSize: imageSize))
+            // 隱藏時也要關閉 hit testing,否則看不見的控制點仍然可以拖曳
+            .allowsHitTesting(!needHide)
     }
 
     var saveButton: some View {
         Button {
             saveCroppedImage()
-            
         } label: {
             Text("Save")
                 .font(.headline)
@@ -191,60 +153,58 @@ private extension CubeCropImageScreen {
     }
 }
 
-// MARK: - Layout
+// MARK: - Gestures
 
 private extension CubeCropImageScreen {
 
-    func getImageSize(in containerSize: CGSize) -> CGSize {
+    /// 移動、縮放都會讓裁切框(以及掛著手勢的 view)跟著位移,
+    /// 所以一律使用 .global 座標,避免 translation 因 view 移動而回饋抖動。
+    func moveGesture(imageSize: CGSize) -> some Gesture {
+        DragGesture(coordinateSpace: .global)
+            .onChanged { value in
+                let startRect = captureDragStartRect().scaled(to: imageSize)
+                let translation = clampedTranslation(
+                    value.translation,
+                    rect: startRect,
+                    imageSize: imageSize
+                )
 
-        let availableWidth = max(0, containerSize.width - horizontalPadding * 2)
-        let availableHeight = max(0, containerSize.height - verticalPadding * 2)
-
-        guard image.size.width > 0, image.size.height > 0 else {
-            return .zero
-        }
-
-        let scale = min(
-            availableWidth / image.size.width,
-            availableHeight / image.size.height
-        )
-
-        return CGSize(
-            width: image.size.width * scale,
-            height: image.size.height * scale
-        )
+                cropRect = startRect
+                    .offsetBy(dx: translation.width, dy: translation.height)
+                    .normalized(in: imageSize)
+            }
+            .onEnded { _ in
+                dragStartRect = nil
+            }
     }
 
-    /// 初始化裁切框，或在圖片顯示尺寸改變時保留原本的裁切比例。
-    func updateCropRect(for imageSize: CGSize) {
-        guard imageSize.width > 0, imageSize.height > 0 else {
-            return
-        }
+    func resizeGesture(_ type: CornerType, imageSize: CGSize) -> some Gesture {
+        DragGesture(coordinateSpace: .global)
+            .onChanged { value in
+                let startRect = captureDragStartRect().scaled(to: imageSize)
 
-        guard previousImageSize != imageSize else {
-            return
-        }
+                cropRect = updateCropSize(
+                    type,
+                    imageSize: imageSize,
+                    startRect: startRect,
+                    translation: value.translation
+                )
+                .normalized(in: imageSize)
+            }
+            .onEnded { _ in
+                dragStartRect = nil
+            }
+    }
 
-        defer {
-            previousImageSize = imageSize
-        }
+    /// 取得本次拖曳開始時的裁切框(只會在拖曳的第一次呼叫時記錄)。
+    func captureDragStartRect() -> CGRect {
+        let startRect = dragStartRect ?? cropRect
+        dragStartRect = startRect
+        return startRect
+    }
 
-        guard previousImageSize.width > 0, previousImageSize.height > 0 else {
-            cropRect = CGRect(origin: .zero, size: imageSize)
-            return
-        }
-
-        let scaleX = imageSize.width / previousImageSize.width
-        let scaleY = imageSize.height / previousImageSize.height
-
-        cropRect = CGRect(x: cropRect.minX * scaleX,
-                          y: cropRect.minY * scaleY,
-                          width: cropRect.width * scaleX,
-                          height: cropRect.height * scaleY)
-
-        // 尺寸改變後，重新限制裁切框的位置與大小。
-        cropRect = cropRect.intersection(CGRect(origin: .zero, size: imageSize))
-        hideMiddleControl = cropRect.width < 100
+    func shouldHideMiddleControl(imageSize: CGSize) -> Bool {
+        cropRect.width * imageSize.width < hideMiddleControlWidth
     }
 }
 
@@ -252,27 +212,11 @@ private extension CubeCropImageScreen {
 
 private extension CubeCropImageScreen {
 
-    func clampedTranslation(_ translation: CGSize, cropRect: CGRect, imageSize: CGSize) -> CGSize {
-
-        let minX: CGFloat = 0
-        let maxX = max(0, imageSize.width - cropRect.width)
-
-        let minY: CGFloat = 0
-        let maxY = max(0, imageSize.height - cropRect.height)
-
-        let newX = min(
-            max(cropRect.minX + translation.width, minX),
-            maxX
-        )
-
-        let newY = min(
-            max(cropRect.minY + translation.height, minY),
-            maxY
-        )
-
-        return CGSize(
-            width: newX - cropRect.minX,
-            height: newY - cropRect.minY
+    /// 限制位移量,讓裁切框不會超出圖片範圍。
+    func clampedTranslation(_ translation: CGSize, rect: CGRect, imageSize: CGSize) -> CGSize {
+        CGSize(
+            width: min(max(translation.width, -rect.minX), imageSize.width - rect.maxX),
+            height: min(max(translation.height, -rect.minY), imageSize.height - rect.maxY)
         )
     }
 }
@@ -281,6 +225,7 @@ private extension CubeCropImageScreen {
 
 private extension CubeCropImageScreen {
 
+    /// 所有參數與回傳值皆為「圖片顯示座標」(pt)。
     func updateCropSize(_ type: CornerType, imageSize: CGSize, startRect: CGRect, translation: CGSize) -> CGRect {
 
         var minX = startRect.minX
@@ -345,88 +290,68 @@ private extension CubeCropImageScreen {
 
 private extension CubeCropImageScreen {
 
-    /// 將 UIImage 渲染成方向正確的 CGImage。
-    func normalizedCGImage(from image: UIImage) -> CGImage? {
-        if image.imageOrientation == .up, let cgImage = image.cgImage {
-            return cgImage
+    /// 依正規化裁切框(0...1)裁切圖片,輸出 scale = 1、方向正確的圖片,
+    /// 像素尺寸即為實際裁切的像素大小。
+    /// 只繪製裁切區域,不需要先把整張原圖重繪一次;UIImage.draw 會自動處理 imageOrientation。
+    func crop(_ image: UIImage, normalizedRect: CGRect) -> UIImage? {
+        let pixelSize = CGSize(
+            width: image.size.width * image.scale,
+            height: image.size.height * image.scale
+        )
+
+        let pixelRect = normalizedRect
+            .scaled(to: pixelSize)
+            .integral
+            .intersection(CGRect(origin: .zero, size: pixelSize))
+
+        guard !pixelRect.isNull, pixelRect.width > 0, pixelRect.height > 0 else {
+            return nil
         }
+
         let format = UIGraphicsImageRendererFormat()
-        format.scale = image.scale
-        return UIGraphicsImageRenderer(size: image.size, format: format)
-            .image { _ in image.draw(at: .zero) }
-            .cgImage
+        format.scale = 1  // 讓 1pt = 1px,輸出尺寸即實際像素
+
+        return UIGraphicsImageRenderer(size: pixelRect.size, format: format).image { _ in
+            image.draw(in: CGRect(
+                x: -pixelRect.minX,
+                y: -pixelRect.minY,
+                width: pixelSize.width,
+                height: pixelSize.height
+            ))
+        }
     }
 
-    /// 將圖片內部座標轉換為 Pixel 座標。
-    func getPixelCropRect(cropRect: CGRect, imageSize: CGSize, cgImage: CGImage) -> CGRect? {
-        guard imageSize.width > 0, imageSize.height > 0 else {
-            return nil
-        }
-
-        let scaleX = CGFloat(cgImage.width) / imageSize.width
-        let scaleY = CGFloat(cgImage.height) / imageSize.height
-
-        let pixelRect = CGRect(x: cropRect.minX * scaleX,
-                               y: cropRect.minY * scaleY,
-                               width: cropRect.width * scaleX,
-                               height: cropRect.height * scaleY).integral
-
-        let imageBounds = CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height)
-        let validRect = pixelRect.intersection(imageBounds)
-        guard !validRect.isNull, !validRect.isEmpty else {
-            return nil
-        }
-
-        return validRect
-    }
-
-    /// 根據 Pixel 座標裁切圖片。
-    func cropImage(_ cgImage: CGImage, rect: CGRect) -> UIImage? {
-        guard let croppedCGImage = cgImage.cropping(to: rect) else {
-            return nil
-        }
-        return UIImage(cgImage: croppedCGImage)
-    }
-
-    /// 執行裁切，並取得可供 API 上傳的 JPEG Data。
+    /// 執行裁切。
     func saveCroppedImage() {
-        guard let cgImage = normalizedCGImage(from: image) else {
-            print("無法取得 CGImage")
-            return
-        }
-
-        guard previousImageSize.width > 0, previousImageSize.height > 0 else {
-            print("圖片顯示尺寸無效")
-            return
-        }
-
-        guard let pixelCropRect = getPixelCropRect(
-            cropRect: cropRect,
-            imageSize: previousImageSize,
-            cgImage: cgImage
-        ) else {
-            print("裁切範圍無效")
-            return
-        }
-
-        guard let croppedImage = cropImage(cgImage, rect: pixelCropRect) else {
+        guard let croppedImage = crop(image, normalizedRect: cropRect) else {
             print("圖片裁切失敗")
             return
         }
-        
+
         afterCropImage = CroppedImage(image: croppedImage)
-        
-        // TODO: 將 imageData 傳給 API
 
-//        guard let imageData = croppedImage.jpegData(compressionQuality: 0.85) else {
-//            print("JPEG 轉換失敗")
-//            return nil
-//        }
-//
-//        print("裁切完成")
-//        print("Pixel Rect:", pixelCropRect)
-//        print("Image Size:", croppedImage.size)
-//        print("JPEG Data:", imageData.count, "bytes")
+        // TODO: 將 croppedImage.jpegData(compressionQuality: 0.85) 傳給 API
+    }
+}
 
+// MARK: - CGRect Helpers
+
+private extension CGRect {
+
+    /// 將「比例座標」轉成指定尺寸下的實際座標。
+    func scaled(to size: CGSize) -> CGRect {
+        CGRect(x: minX * size.width,
+               y: minY * size.height,
+               width: width * size.width,
+               height: height * size.height)
+    }
+
+    /// 將指定尺寸下的實際座標轉成「比例座標」。
+    func normalized(in size: CGSize) -> CGRect {
+        guard size.width > 0, size.height > 0 else { return self }
+        return CGRect(x: minX / size.width,
+                      y: minY / size.height,
+                      width: width / size.width,
+                      height: height / size.height)
     }
 }
