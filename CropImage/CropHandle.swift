@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-enum CornerType {
+enum CropHandle {
     case topLeading
     case top
     case topTrailing

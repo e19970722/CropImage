@@ -13,7 +13,7 @@ struct CroppedImage: Identifiable {
     let image: UIImage
 }
 
-struct CubeCropImageScreen: View {
+struct CropImageScreen: View {
 
     // MARK: - Image
 
@@ -71,12 +71,12 @@ struct CubeCropImageScreen: View {
 // MARK: - Preview
 #Preview {
     NavigationView {
-        CubeCropImageScreen()
+        CropImageScreen()
     }
 }
 
 // MARK: - Views
-private extension CubeCropImageScreen {
+private extension CropImageScreen {
 
     func cropOverlay(imageSize: CGSize) -> some View {
         let rect = cropRect.scaled(to: imageSize)
@@ -125,7 +125,7 @@ private extension CubeCropImageScreen {
             .offset(x: rect.minX, y: rect.minY)
     }
 
-    func cornerDragView(_ type: CornerType, imageSize: CGSize) -> some View {
+    func cornerDragView(_ type: CropHandle, imageSize: CGSize) -> some View {
         let needHide = (type == .top || type == .bottom) && shouldHideMiddleControl(imageSize: imageSize)
 
         return Image(type.image)
@@ -155,7 +155,7 @@ private extension CubeCropImageScreen {
 
 // MARK: - Gestures
 
-private extension CubeCropImageScreen {
+private extension CropImageScreen {
 
     /// 移動、縮放都會讓裁切框(以及掛著手勢的 view)跟著位移,
     /// 所以一律使用 .global 座標,避免 translation 因 view 移動而回饋抖動。
@@ -178,7 +178,7 @@ private extension CubeCropImageScreen {
             }
     }
 
-    func resizeGesture(_ type: CornerType, imageSize: CGSize) -> some Gesture {
+    func resizeGesture(_ type: CropHandle, imageSize: CGSize) -> some Gesture {
         DragGesture(coordinateSpace: .global)
             .onChanged { value in
                 let startRect = captureDragStartRect().scaled(to: imageSize)
@@ -210,7 +210,7 @@ private extension CubeCropImageScreen {
 
 // MARK: - Drag Logic
 
-private extension CubeCropImageScreen {
+private extension CropImageScreen {
 
     /// 限制位移量,讓裁切框不會超出圖片範圍。
     func clampedTranslation(_ translation: CGSize, rect: CGRect, imageSize: CGSize) -> CGSize {
@@ -223,10 +223,10 @@ private extension CubeCropImageScreen {
 
 // MARK: - Resize Logic
 
-private extension CubeCropImageScreen {
+private extension CropImageScreen {
 
     /// 所有參數與回傳值皆為「圖片顯示座標」(pt)。
-    func updateCropSize(_ type: CornerType, imageSize: CGSize, startRect: CGRect, translation: CGSize) -> CGRect {
+    func updateCropSize(_ type: CropHandle, imageSize: CGSize, startRect: CGRect, translation: CGSize) -> CGRect {
 
         var minX = startRect.minX
         var maxX = startRect.maxX
@@ -288,7 +288,7 @@ private extension CubeCropImageScreen {
 
 // MARK: - Image Processing
 
-private extension CubeCropImageScreen {
+private extension CropImageScreen {
 
     /// 依正規化裁切框(0...1)裁切圖片,輸出 scale = 1、方向正確的圖片,
     /// 像素尺寸即為實際裁切的像素大小。
