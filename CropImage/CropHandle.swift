@@ -14,34 +14,7 @@ enum CropHandle {
     case bottomLeading
     case bottom
     case bottomTrailing
-    
-    var image: ImageResource {
-        switch self {
-        default: .icCornerButton
-        }
-    }
-    
-    var leadingPadding: CGFloat {
-        switch self {
-        default: 0
-        }
-    }
-    
-    var topPadding: CGFloat {
-        switch self {
-        default: 0
-        }
-    }
-    
-    var trailingPadding: CGFloat {
-        switch self {
-        default: 0
-        }
-    }
-    
-    var bottomPadding: CGFloat {
-        switch self {
-        default: 0
-        }
-    }
+
+    /// 使用圖片名稱，讓 Image(image) 也能支援 iOS 15。
+    var image: String { "ic_corner_button" }
 }
