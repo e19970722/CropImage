@@ -44,7 +44,7 @@ extension CropImageViewStore {
     
     /// State 狀態
     struct State {
-        /// 裁切框相對「固定編輯容器」的比例
+        /// 裁切框相對「固定編輯容器」的比例 (0-1)
         var cropRect = CGRect(x: 0, y: 0, width: 1, height: 1)
         /// 圖片放大的比例
         var zoomScale: CGFloat = 1
