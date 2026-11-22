@@ -81,7 +81,7 @@ final class CropImageViewStoreTests: XCTestCase {
         XCTAssertEqual(store.state.cropRect.maxY, 1)
     }
     
-    /// 圖片放大 2 倍與拖曳圖片，不超出原本圖片的邊界
+    /// 圖片放大 2 倍與拖曳圖片，不超出原本圖片的邊界 test
     func test_afterScale_dragImageOutsideBounds_clampsToImageBounds() {
         // Given
         let imageSize = CGSize(width: 300, height: 400)
