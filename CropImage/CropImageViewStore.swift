@@ -19,15 +19,22 @@ final class CropImageViewStore: ObservableObject {
     /// 環境依賴
     private let environment: Environment
     
+    /// 裁切框最小大小
+    private let minCropSize: CGSize
+    
     // MARK: - Init
     
     /// 初始化
     /// - Parameters:
     ///   - state: 初始化狀態
     ///   - environment: 環境依賴
-    init(initialState state: State, environment: Environment) {
+    ///   - minCropSize: 裁切框最小大小
+    init(initialState state: State,
+         environment: Environment,
+         minCropSize: CGSize) {
         self.state = state
         self.environment = environment
+        self.minCropSize = minCropSize
     }
 }
 
@@ -62,11 +69,11 @@ extension CropImageViewStore {
         /// 手勢運行中
         case gestureRunning
         /// 更新 Layout
-        case updateLayout(size: CGSize, minCropSize: CGSize)
+        case updateLayout(size: CGSize)
         /// 圖片拖曳改變
         case imageDragChanged(deltaSize: CGSize, imageSize: CGSize)
         /// 裁切框的邊角控制項拖曳改變
-        case cropHandleDragChanged(handle: CropHandle, deltaSize: CGSize, imageSize: CGSize, minCropSize: CGSize)
+        case cropHandleDragChanged(handle: CropHandle, deltaSize: CGSize, imageSize: CGSize)
         /// 縮放手勢改變
         case zoomGestureChanged(scale: CGFloat)
     }
@@ -120,7 +127,7 @@ private extension CropImageViewStore {
                 $0.imageOffset = correctedOffset(state.imageOffset, scale: state.zoomScale)
             }
             
-        case let .updateLayout(size, minCropSize):
+        case let .updateLayout(size):
             updateState {
                 $0.zoomScale = clamp(state.zoomScale, 1, 3)
                 $0.cropRect = constrainedCropRect(state.cropRect.scaled(to: size), in: size, minSize: minCropSize).normalized(in: size)
@@ -133,7 +140,7 @@ private extension CropImageViewStore {
                 $0.imageOffset.height += deltaSize.height / imageSize.height
             }
             
-        case let .cropHandleDragChanged(handle, deltaSize, imageSize, minCropSize):
+        case let .cropHandleDragChanged(handle, deltaSize, imageSize):
             updateState {
                 let rect = state.cropRect.scaled(to: imageSize)
                 $0.cropRect = resizedRect(rect, handle: handle, by: deltaSize, in: imageSize, minSize: minCropSize).normalized(in: imageSize)
